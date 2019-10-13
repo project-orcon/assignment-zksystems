@@ -19,7 +19,6 @@
           <div class="d-flex flex-no-wrap justify-space-between">
             <div>
               <v-card-title class="subtitle-2">SGT5-4000F | GT10 GT20</v-card-title>
-
               <v-card-text>
                 <v-card-subtitle class="subtitle-2">{{currentDataPoint.timestamp}}</v-card-subtitle>
                 <br />
@@ -37,7 +36,9 @@
       <v-col md="6" cols="12">
         <v-card>
           <v-card-title class="subtitle-2">TurnUp in MWh</v-card-title>
-          <v-card-text></v-card-text>
+          <v-card-text>
+            <canvas id="myChart" width="400" height="200" style="background-color:#eeeeee"></canvas>
+          </v-card-text>
         </v-card>
       </v-col>
       <v-col md="6" cols="12">
@@ -72,12 +73,59 @@ export default {
   },
   mounted: function() {
     this.loadCSV();
+    this.loadChart();
   },
   methods: {
     //takes a string of european number and converts to number
     convertStringToNum(numString) {
       var result = parseFloat(numString.replace(".", "").replace(",", "."));
       return result;
+    },
+    loadChart() {
+      var canvas = document.getElementById("myChart");
+      var myBarChart = Chart.Bar(canvas, {
+        data: {
+          labels: ["2019-10-10", "2019-10-11"],
+          datasets: [
+            {
+              label: "Minimum",
+              data: [67.8, 11.5],
+              backgroundColor: "#50BED7"
+            },
+            {
+              label: "Medium",
+              data: [20.7, 19.7],
+              backgroundColor: "#3296B9" // yellow
+            },
+            {
+              label: "Maximum",
+              data: [11.4, 70.5],
+              backgroundColor: "#095F87" // red
+            }
+          ]
+        },
+        options: {
+          legend: { position: "bottom" },
+          scales: {
+            xAxes: [
+              {
+                barPercentage: 0.06,
+                stacked: true,
+                offset: true,
+                type: "time",
+                time: {
+                  parser: "YYYY-MM-DD",
+                  displayFormats: { day: "MM/YY" },
+                  tooltipFormat: "DD/MM/YY",
+                  unit: "month"
+                }
+              }
+            ],
+
+            yAxes: [{ stacked: true }]
+          }
+        }
+      });
     },
     updateTotals() {
       //update the mwh and euro totals based on new data point.
