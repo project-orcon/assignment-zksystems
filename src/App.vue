@@ -1,10 +1,10 @@
 <template>
   <v-app>
-    <v-toolbar class="teal white--text">
+    <v-app-bar class="teal white--text" app>
       <div class="hidden-sm-and-down">
         <v-btn
           v-for="item in menu"
-          :key="item.icon"
+          :key="item.title"
           :to="item.link"
           text
           class="white--text"
@@ -25,10 +25,13 @@
       </v-menu>
       <v-spacer></v-spacer>
       <v-toolbar-title>ZkSystems</v-toolbar-title>
-    </v-toolbar>
-    <v-content>
-      <HelloWorld />
-    </v-content>
+    </v-app-bar>
+   <v-content>
+    <v-container fluid>
+      <router-view></router-view>
+    </v-container>
+   </v-content>
+      
   </v-app>
 </template>
 
