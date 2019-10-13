@@ -1,31 +1,53 @@
 <template>
-  <div id="app">
-    <div id="nav">
-      <router-link to="/">Home</router-link> |
-      <router-link to="/about">About</router-link>
-    </div>
-    <router-view/>
-  </div>
+  <v-app>
+    <v-toolbar class="teal white--text">
+      <div class="hidden-sm-and-down">
+        <v-btn
+          v-for="item in menu"
+          :key="item.icon"
+          :to="item.link"
+          text
+          class="white--text"
+          style="text-transform:none"
+        >{{ item.title }}</v-btn>
+      </div>
+      <v-menu class="hidden-md-and-up teal white--text" offset-y>
+        <template v-slot:activator="{ on }">
+          <v-app-bar-nav-icon v-on="on" class="hidden-md-and-up white--text"></v-app-bar-nav-icon>
+        </template>
+        <v-list style="min-width:150px" class="teal white--text">
+          <v-list-item v-for="item in menu" :key="item.icon">
+            <v-list-item-content>
+              <v-list-item-title class="white--text">{{ item.title }}</v-list-item-title>
+            </v-list-item-content>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+      <v-spacer></v-spacer>
+      <v-toolbar-title>ZkSystems</v-toolbar-title>
+    </v-toolbar>
+    <v-content>
+      <HelloWorld />
+    </v-content>
+  </v-app>
 </template>
 
-<style>
-#app {
-  font-family: 'Avenir', Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-}
-#nav {
-  padding: 30px;
-}
+<script>
+import HelloWorld from "./components/HelloWorld";
 
-#nav a {
-  font-weight: bold;
-  color: #2c3e50;
-}
-
-#nav a.router-link-exact-active {
-  color: #42b983;
-}
-</style>
+export default {
+  name: "App",
+  components: {
+    HelloWorld
+  },
+  data: () => ({
+    menu: [
+      { icon: "home", title: "TurnUp Dashboard" },
+      { icon: "info", title: "Invoice" },
+      { icon: "info", title: "Smart Contract" },
+      { icon: "info", title: "Transaction" },
+      { icon: "info", title: "Machine Overview" }
+    ]
+  })
+};
+</script>
