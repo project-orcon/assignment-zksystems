@@ -49,6 +49,7 @@
           </v-card-text>
         </v-card>
       </v-col>
+      {{stockMarketData}}
     </div>
   </div>
 </template>
@@ -69,6 +70,7 @@ export default {
     return {
       updateSignalPeriod: 0,
       currentDataPoint: { timestamp: "", mwh: 0, irv: 0, flame: "", eoh: "" },
+      hourlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       currentDay: "",
@@ -77,12 +79,15 @@ export default {
       barCanvas: {},
       barChart: {},
       lineCanvas: {},
-      lineChart: {}
+      lineChart: {},
+      stockMarketData:{},
+      dailyMarketTotal:0,
     };
   },
   mounted: function() {
     this.loadChart();
     this.loadCSV();
+    this.loadStockMarketCSV();
   },
   computed: {
     currentMonth: function() {
@@ -100,6 +105,12 @@ export default {
         this.dailyMwhTotals.minimum * PRICE_MIN_MINIMUM +
         this.dailyMwhTotals.medium * PRICE_MIN_MEDIUM +
         this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+      );
+    },
+    hourlyMwhTotal: function() {return (
+        this.hourlyMwhTotals.minimum +
+        this.hourlyMwhTotals.medium +
+        this.hourlyMwhTotals.maximum
       );
     }
   },
@@ -285,12 +296,35 @@ export default {
         this.monthlyMwhTotals.maximum
       );
     },
+
     totalEuro() {
       return (
         this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM +
         this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM +
         this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
       );
+    },
+    updateDailyMarketTotal(day,hour){
+      this.dailyMarketTotal += this.stockDict[day+"-"+hour]*this.hourlyMwhTotal
+    },
+      
+    loadStockMarketCSV(){
+      var stockDict={};
+      var vueInstance=this
+      Papa.parse("/stockmarket_price_data.csv", {
+        download: true,
+        header: true,
+	step: function(row) {
+    console.log("Row:", row.data);
+    row.data.hours=row.data.hours.replace("H","");
+    stockDict[row.data.day+"-"+row.data.hours]=row.data.price;
+    
+	},
+	complete: function(results) {
+    console.log("Finished:", results.data);
+    vueInstance.stockMarketData=stockDict;
+	}
+});
     },
     loadCSV() {
       //load the signal CSV file streaming one row at a time.
