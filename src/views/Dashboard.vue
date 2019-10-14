@@ -5,13 +5,13 @@
       <v-col md="4" cols="12">
         <v-card height="100%">
           <v-card-title class="subtitle-2">TurnUp in MWh (current month)</v-card-title>
-          <v-card-text class="teal--text display-2">{{totalMWh()}} MWh</v-card-text>
+          <v-card-text class="teal--text display-2">{{totalMWh().toFixed(2)}} MWh</v-card-text>
         </v-card>
       </v-col>
       <v-col md="4" cols="12">
         <v-card height="100%">
           <v-card-title class="subtitle-2">TurnUp in Euro (current month)</v-card-title>
-          <v-card-text class="teal--text display-2">&euro; {{totalEuro()}}</v-card-text>
+          <v-card-text class="teal--text display-2">&euro; {{totalEuro().toFixed(2)}}</v-card-text>
         </v-card>
       </v-col>
       <v-col md="4" cols="12">
@@ -44,7 +44,9 @@
       <v-col md="6" cols="12">
         <v-card>
           <v-card-title class="subtitle-2">TurnUp in Euro</v-card-title>
-          <v-card-text></v-card-text>
+          <v-card-text>
+            <canvas id="mylineChart" width="400" height="200" style="background-color:#eeeeee"></canvas>
+          </v-card-text>
         </v-card>
       </v-col>
     </div>
@@ -67,18 +69,39 @@ export default {
     return {
       updateSignalPeriod: 0,
       currentDataPoint: { timestamp: "", mwh: 0, irv: 0, flame: "", eoh: "" },
-      mwhTotals: { minimum: 0, medium: 0, maximum: 0 },
-      euroTotal: 0,
+      dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
+      monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       currentDay: "",
-      currentDayIndex: 0,
-      currentDayMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
-      canvas: {},
-      barchart: {}
+      currentDayIndex: -1,
+      currentMonth: "",
+      barCanvas: {},
+      barChart: {},
+      lineCanvas: {},
+      lineChart: {}
     };
   },
   mounted: function() {
-    this.loadCSV();
     this.loadChart();
+    this.loadCSV();
+  },
+  computed: {
+    currentMonth: function() {
+      return currentDay.split("-")[1];
+    },
+    monthlyEuroTotal: function() {
+      return (
+        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM +
+        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM +
+        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+      );
+    },
+    dailyEuroTotal: function() {
+      return (
+        this.dailyMwhTotals.minimum * PRICE_MIN_MINIMUM +
+        this.dailyMwhTotals.medium * PRICE_MIN_MEDIUM +
+        this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+      );
+    }
   },
   methods: {
     //takes a string of european number and converts to number
@@ -87,9 +110,11 @@ export default {
       return result;
     },
     loadChart() {
-      var canvas = document.getElementById("myChart");
-      this.canvas = canvas;
-      var myBarChart = Chart.Bar(canvas, {
+      var barCanvas = document.getElementById("myChart");
+      var lineCanvas = document.getElementById("mylineChart");
+      this.lineCanvas = lineCanvas;
+      this.barCanvas = barCanvas;
+      var mybarChart = Chart.Bar(barCanvas, {
         data: {
           labels: [],
           datasets: [
@@ -111,6 +136,9 @@ export default {
           ]
         },
         options: {
+          tooltips: {
+            enabled: false
+          },
           legend: { position: "bottom" },
           scales: {
             xAxes: [
@@ -133,35 +161,91 @@ export default {
         }
       });
 
-      this.barchart = myBarChart;
+      this.barChart = mybarChart;
+
+      var mylineChart = new Chart(lineCanvas, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Customers Price",
+              data: [],
+              backgroundColor: "#50BED7"
+            },
+            {
+              label: "Market Price",
+              data: [],
+              backgroundColor: "#095F87" // red
+            }
+          ]
+        },
+        options: {
+          tooltips: {
+            enabled: false
+          },
+          elements: {
+            point: {
+              radius: 2
+            }
+          },
+          legend: { position: "bottom" },
+          scales: {
+            xAxes: [
+              {
+                type: "time",
+                time: {
+                  parser: "YYYY-MM-DD",
+                  displayFormats: { day: "MM/YY" },
+                  tooltipFormat: "DD/MM/YY",
+                  unit: "month"
+                }
+              }
+            ],
+
+            yAxes: []
+          }
+        }
+      });
+      this.lineChart = mylineChart;
     },
     updateDailyTotals(day, newData) {
       if (day != this.currentDay) {
-        console.log("new day %0 %0", day, this.currentDayMwhTotals);
-        this.currentDayMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-        this.barchart.data.labels.push(day);
-        this.barchart.data.datasets[0].data.push(0);
-        this.barchart.data.datasets[1].data.push(0);
-        this.barchart.data.datasets[2].data.push(0);
-        this.barchart.update();
+        console.log("new day %0 %0", day, this.dailyMwhTotals);
+        this.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.barChart.data.labels.push(day);
+        this.barChart.data.datasets[0].data.push(0);
+        this.barChart.data.datasets[1].data.push(0);
+        this.barChart.data.datasets[2].data.push(0);
+        this.barChart.update();
+
+        this.lineChart.data.labels.push(day);
+        this.lineChart.data.datasets[0].data.push(0);
+        this.lineChart.data.datasets[1].data.push(0);
+        this.lineChart.update();
+
         this.currentDay = day;
         this.currentDayIndex++;
       }
-      this.currentDayMwhTotals.minimum += newData.minimum;
-      this.currentDayMwhTotals.medium += newData.medium;
-      this.currentDayMwhTotals.maximum += newData.maximum;
+      this.dailyMwhTotals.minimum += newData.minimum;
+      this.dailyMwhTotals.medium += newData.medium;
+      this.dailyMwhTotals.maximum += newData.maximum;
 
-      this.barchart.data.datasets[0].data[
+      this.barChart.data.datasets[0].data[
         this.currentDayIndex
-      ] = this.currentDayMwhTotals.minimum;
-      this.barchart.data.datasets[1].data[
+      ] = this.dailyMwhTotals.minimum;
+      this.barChart.data.datasets[1].data[
         this.currentDayIndex
-      ] = this.currentDayMwhTotals.medium;
-      this.barchart.data.datasets[2].data[
+      ] = this.dailyMwhTotals.medium;
+      this.barChart.data.datasets[2].data[
         this.currentDayIndex
-      ] = this.currentDayMwhTotals.maximum;
+      ] = this.dailyMwhTotals.maximum;
+      this.barChart.update();
 
-      this.barchart.update();
+      this.lineChart.data.datasets[0].data[
+        this.currentDayIndex
+      ] = this.dailyEuroTotal;
+      this.lineChart.update();
     },
     updateTotals() {
       //update the mwh and euro totals based on new data point.
@@ -169,7 +253,7 @@ export default {
       if (this.currentDataPoint.flame === FLAME_ON) {
         var irv = this.currentDataPoint.irv;
         if (MINIMUM_LOWER <= irv && irv <= MINIMUM_UPPER) {
-          this.mwhTotals.minimum += this.currentDataPoint.mwh;
+          this.monthlyMwhTotals.minimum += this.currentDataPoint.mwh;
           result.minimum = this.currentDataPoint.mwh;
           console.log(
             "adding mimimum irv is " + this.currentDataPoint.irv + "mwh is ",
@@ -180,14 +264,14 @@ export default {
             "adding medium irv is " + this.currentDataPoint.irv + "mwh is ",
             this.currentDataPoint.mwh
           );
-          this.mwhTotals.medium += this.currentDataPoint.mwh;
+          this.monthlyMwhTotals.medium += this.currentDataPoint.mwh;
           result.medium = this.currentDataPoint.mwh;
         } else if (MAXIMUM_LOWER <= irv) {
           console.log(
             "adding maximum irv is " + this.currentDataPoint.irv + "mwh is ",
             this.currentDataPoint.mwh
           );
-          this.mwhTotals.maximum += this.currentDataPoint.mwh;
+          this.monthlyMwhTotals.maximum += this.currentDataPoint.mwh;
           result.maximum = this.currentDataPoint.mwh;
         }
       }
@@ -196,14 +280,16 @@ export default {
     },
     totalMWh() {
       return (
-        this.mwhTotals.minimum + this.mwhTotals.medium + this.mwhTotals.maximum
+        this.monthlyMwhTotals.minimum +
+        this.monthlyMwhTotals.medium +
+        this.monthlyMwhTotals.maximum
       );
     },
     totalEuro() {
       return (
-        this.mwhTotals.minimum * PRICE_MIN_MINIMUM +
-        this.mwhTotals.medium * PRICE_MIN_MEDIUM +
-        this.mwhTotals.maximum * PRICE_MIN_MAXIMUM
+        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM +
+        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM +
+        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
       );
     },
     loadCSV() {
@@ -224,6 +310,7 @@ export default {
           };
           var diff = vueInstance.updateTotals();
           var day = data.timestamp.split(" ")[0];
+
           vueInstance.updateDailyTotals(day, diff);
           setTimeout(function() {
             parser.resume();
