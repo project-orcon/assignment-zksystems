@@ -68,7 +68,12 @@ export default {
       updateSignalPeriod: 0,
       currentDataPoint: { timestamp: "", mwh: 0, irv: 0, flame: "", eoh: "" },
       mwhTotals: { minimum: 0, medium: 0, maximum: 0 },
-      euroTotal: 0
+      euroTotal: 0,
+      currentDay: "",
+      currentDayIndex: 0,
+      currentDayMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
+      canvas: {},
+      barchart: {}
     };
   },
   mounted: function() {
@@ -83,23 +88,24 @@ export default {
     },
     loadChart() {
       var canvas = document.getElementById("myChart");
+      this.canvas = canvas;
       var myBarChart = Chart.Bar(canvas, {
         data: {
-          labels: ["2019-10-10", "2019-10-11"],
+          labels: [],
           datasets: [
             {
               label: "Minimum",
-              data: [67.8, 11.5],
+              data: [],
               backgroundColor: "#50BED7"
             },
             {
               label: "Medium",
-              data: [20.7, 19.7],
+              data: [],
               backgroundColor: "#3296B9" // yellow
             },
             {
               label: "Maximum",
-              data: [11.4, 70.5],
+              data: [],
               backgroundColor: "#095F87" // red
             }
           ]
@@ -126,13 +132,45 @@ export default {
           }
         }
       });
+
+      this.barchart = myBarChart;
+    },
+    updateDailyTotals(day, newData) {
+      if (day != this.currentDay) {
+        console.log("new day %0 %0", day, this.currentDayMwhTotals);
+        this.currentDayMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.barchart.data.labels.push(day);
+        this.barchart.data.datasets[0].data.push(0);
+        this.barchart.data.datasets[1].data.push(0);
+        this.barchart.data.datasets[2].data.push(0);
+        this.barchart.update();
+        this.currentDay = day;
+        this.currentDayIndex++;
+      }
+      this.currentDayMwhTotals.minimum += newData.minimum;
+      this.currentDayMwhTotals.medium += newData.medium;
+      this.currentDayMwhTotals.maximum += newData.maximum;
+
+      this.barchart.data.datasets[0].data[
+        this.currentDayIndex
+      ] = this.currentDayMwhTotals.minimum;
+      this.barchart.data.datasets[1].data[
+        this.currentDayIndex
+      ] = this.currentDayMwhTotals.medium;
+      this.barchart.data.datasets[2].data[
+        this.currentDayIndex
+      ] = this.currentDayMwhTotals.maximum;
+
+      this.barchart.update();
     },
     updateTotals() {
       //update the mwh and euro totals based on new data point.
+      var result = { minimum: 0, medium: 0, maximum: 0 };
       if (this.currentDataPoint.flame === FLAME_ON) {
         var irv = this.currentDataPoint.irv;
         if (MINIMUM_LOWER <= irv && irv <= MINIMUM_UPPER) {
           this.mwhTotals.minimum += this.currentDataPoint.mwh;
+          result.minimum = this.currentDataPoint.mwh;
           console.log(
             "adding mimimum irv is " + this.currentDataPoint.irv + "mwh is ",
             this.currentDataPoint.mwh
@@ -143,14 +181,18 @@ export default {
             this.currentDataPoint.mwh
           );
           this.mwhTotals.medium += this.currentDataPoint.mwh;
+          result.medium = this.currentDataPoint.mwh;
         } else if (MAXIMUM_LOWER <= irv) {
           console.log(
             "adding maximum irv is " + this.currentDataPoint.irv + "mwh is ",
             this.currentDataPoint.mwh
           );
           this.mwhTotals.maximum += this.currentDataPoint.mwh;
+          result.maximum = this.currentDataPoint.mwh;
         }
       }
+
+      return result;
     },
     totalMWh() {
       return (
@@ -180,7 +222,9 @@ export default {
             flame: data.flame,
             eoh: data.eoh
           };
-          vueInstance.updateTotals();
+          var diff = vueInstance.updateTotals();
+          var day = data.timestamp.split(" ")[0];
+          vueInstance.updateDailyTotals(day, diff);
           setTimeout(function() {
             parser.resume();
           }, vueInstance.updateSignalPeriod);
