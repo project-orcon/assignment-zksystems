@@ -49,7 +49,11 @@
           </v-card-text>
         </v-card>
       </v-col>
-      {{stockMarketData}}
+      {{hourlyMwhTotals}}
+      <br />
+      {{dailyMarketTotal}}
+      <br />
+      {{hourlyMwhTotal}}
     </div>
   </div>
 </template>
@@ -73,6 +77,7 @@ export default {
       hourlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
+      currentHour: 0,
       currentDay: "",
       currentDayIndex: -1,
       currentMonth: "",
@@ -80,8 +85,8 @@ export default {
       barChart: {},
       lineCanvas: {},
       lineChart: {},
-      stockMarketData:{},
-      dailyMarketTotal:0,
+      stockMarketData: {},
+      dailyMarketTotal: 0
     };
   },
   mounted: function() {
@@ -107,7 +112,8 @@ export default {
         this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM
       );
     },
-    hourlyMwhTotal: function() {return (
+    hourlyMwhTotal: function() {
+      return (
         this.hourlyMwhTotals.minimum +
         this.hourlyMwhTotals.medium +
         this.hourlyMwhTotals.maximum
@@ -159,9 +165,8 @@ export default {
                 offset: true,
                 type: "time",
                 time: {
-                  parser: "YYYY-MM-DD",
+                  parser: "DD.MM.YYYY",
                   displayFormats: { day: "MM/YY" },
-                  tooltipFormat: "DD/MM/YY",
                   unit: "month"
                 }
               }
@@ -206,9 +211,8 @@ export default {
               {
                 type: "time",
                 time: {
-                  parser: "YYYY-MM-DD",
+                  parser: "DD.MM.YYYY",
                   displayFormats: { day: "MM/YY" },
-                  tooltipFormat: "DD/MM/YY",
                   unit: "month"
                 }
               }
@@ -220,10 +224,23 @@ export default {
       });
       this.lineChart = mylineChart;
     },
+    updateHourlyTotals(hour, newData) {
+      //every hour have to update daily market price total.
+      if (hour != this.currentHour) {
+        this.updateDailyMarketTotal(this.currentDay, this.currentHour);
+        this.currentHour = hour;
+        this.hourlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+      }
+      this.hourlyMwhTotals.minimum += newData.minimum;
+      this.hourlyMwhTotals.medium += newData.medium;
+      this.hourlyMwhTotals.maximum += newData.maximum;
+    },
     updateDailyTotals(day, newData) {
       if (day != this.currentDay) {
         console.log("new day %0 %0", day, this.dailyMwhTotals);
         this.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.dailyMarketTotal = 0;
+
         this.barChart.data.labels.push(day);
         this.barChart.data.datasets[0].data.push(0);
         this.barChart.data.datasets[1].data.push(0);
@@ -256,6 +273,10 @@ export default {
       this.lineChart.data.datasets[0].data[
         this.currentDayIndex
       ] = this.dailyEuroTotal;
+
+      this.lineChart.data.datasets[1].data[
+        this.currentDayIndex
+      ] = this.dailyMarketTotal;
       this.lineChart.update();
     },
     updateTotals() {
@@ -304,27 +325,43 @@ export default {
         this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
       );
     },
-    updateDailyMarketTotal(day,hour){
-      this.dailyMarketTotal += this.stockDict[day+"-"+hour]*this.hourlyMwhTotal
+    updateDailyMarketTotal(day, hour) {
+      console.log("^^^", day + "-" + hour);
+      console.log("^^^", this.stockMarketData[day + "-" + hour]);
+      if (this.stockMarketData[day + "-" + hour]) {
+        this.dailyMarketTotal +=
+          this.stockMarketData[day + "-" + hour] * this.hourlyMwhTotal;
+      }
     },
-      
-    loadStockMarketCSV(){
-      var stockDict={};
-      var vueInstance=this
+
+    loadStockMarketCSV() {
+      var stockDict = {};
+      var vueInstance = this;
       Papa.parse("/stockmarket_price_data.csv", {
         download: true,
         header: true,
-	step: function(row) {
-    console.log("Row:", row.data);
-    row.data.hours=row.data.hours.replace("H","");
-    stockDict[row.data.day+"-"+row.data.hours]=row.data.price;
-    
-	},
-	complete: function(results) {
-    console.log("Finished:", results.data);
-    vueInstance.stockMarketData=stockDict;
-	}
-});
+        step: function(row) {
+          console.log("Row:", row.data);
+          row.data.hours = row.data.hours.replace("H", "");
+          stockDict[row.data.day + "-" + row.data.hours] = parseFloat(
+            row.data.price
+          );
+        },
+        complete: function(results) {
+          console.log("Finished:", results.data);
+          vueInstance.stockMarketData = stockDict;
+        }
+      });
+    },
+    reformatTimestamp(original) {
+      //formats timestamp from YYYY-MM-DD to DD.MM.YYYY
+      var date = original.split(" ")[0];
+      var time = original.split(" ")[1];
+      var year = date.split("-")[0];
+      var month = date.split("-")[1];
+      var day = date.split("-")[2];
+
+      return day + "." + month + "." + year + " " + time;
     },
     loadCSV() {
       //load the signal CSV file streaming one row at a time.
@@ -335,17 +372,21 @@ export default {
         step: function(row, parser) {
           parser.pause();
           var data = row.data;
+          var timestamp = vueInstance.reformatTimestamp(data.timestamp);
+
           vueInstance.currentDataPoint = {
-            timestamp: data.timestamp,
+            timestamp: timestamp,
             mwh: vueInstance.convertStringToNum(data.mw) / 60.0,
             irv: vueInstance.convertStringToNum(data.irv),
             flame: data.flame,
             eoh: data.eoh
           };
           var diff = vueInstance.updateTotals();
-          var day = data.timestamp.split(" ")[0];
+          var date = timestamp.split(" ")[0];
+          var hour = timestamp.split(" ")[1].split(":")[0];
 
-          vueInstance.updateDailyTotals(day, diff);
+          vueInstance.updateDailyTotals(date, diff);
+          vueInstance.updateHourlyTotals(hour, diff);
           setTimeout(function() {
             parser.resume();
           }, vueInstance.updateSignalPeriod);
