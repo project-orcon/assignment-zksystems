@@ -306,42 +306,17 @@ export default {
       }
       this.barChart.data.labels.push(nextMonthName);
     },
+    updateChartsNewDay(day) {
+      this.lineChart.data.labels.push(day);
+      this.lineChart.data.datasets[0].data.push(0);
+      this.lineChart.data.datasets[1].data.push(0);
+      this.lineChart.update();
 
-    updateHourlyTotals(hour, newMwh, newEuro) {
-      //every hour have to update daily market price total.
-      if (hour != this.currentHour) {
-        this.updateDailyMarketTotal(this.currentDay, this.currentHour);
-        this.currentHour = hour;
-        this.hourlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-      }
-      this.hourlyMwhTotals.minimum += newMwh.minimum;
-      this.hourlyMwhTotals.medium += newMwh.medium;
-      this.hourlyMwhTotals.maximum += newMwh.maximum;
+      this.currentDay = day;
+      this.currentDayIndex++;
+      this.lineChartIndex++;
     },
-    updateDailyTotals(day, newMwh, newEuro) {
-      if (day != this.currentDay) {
-        this.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-        this.dailyMarketTotal = 0;
-
-        //this.barChart.data.labels.push(day);
-        this.barChart.data.datasets[0].data.push(0);
-        this.barChart.data.datasets[1].data.push(0);
-        this.barChart.data.datasets[2].data.push(0);
-        this.barChart.update();
-
-        this.lineChart.data.labels.push(day);
-        this.lineChart.data.datasets[0].data.push(0);
-        this.lineChart.data.datasets[1].data.push(0);
-        this.lineChart.update();
-
-        this.currentDay = day;
-        this.currentDayIndex++;
-        this.lineChartIndex++;
-      }
-      this.dailyMwhTotals.minimum += newMwh.minimum;
-      this.dailyMwhTotals.medium += newMwh.medium;
-      this.dailyMwhTotals.maximum += newMwh.maximum;
-
+    updateCharts() {
       this.barChart.data.datasets[0].data[
         this.currentDayIndex
       ] = this.dailyMwhTotals.minimum;
@@ -362,39 +337,43 @@ export default {
       ] = this.dailyMarketTotal;
       this.lineChart.update();
     },
-    updateMonthlyTotals(day, month, newMwh, newEuro) {
-      if (month != this.currentMonth) {
-        this.monthlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-        this.currentMonth = month;
-
-        //reinitialise graphs.
-        this.currentDayIndex = day - 2;
-        this.initializeBarChart(month);
-        this.initializeLineChart();
+    updateHourlyTotals(hour, newMwh) {
+      //every hour have to update daily market price total.
+      if (hour != this.currentHour) {
+        this.updateDailyMarketTotal(this.currentDay, this.currentHour);
+        this.currentHour = hour;
+        this.hourlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
       }
+      this.hourlyMwhTotals.minimum += newMwh.minimum;
+      this.hourlyMwhTotals.medium += newMwh.medium;
+      this.hourlyMwhTotals.maximum += newMwh.maximum;
+    },
+    updateDailyTotals(day, newMwh) {
+      this.dailyMwhTotals.minimum += newMwh.minimum;
+      this.dailyMwhTotals.medium += newMwh.medium;
+      this.dailyMwhTotals.maximum += newMwh.maximum;
+    },
+    updateMonthlyTotals(day, month, newMwh) {
       this.monthlyMwhTotals.minimum += newMwh.minimum;
       this.monthlyMwhTotals.medium += newMwh.medium;
       this.monthlyMwhTotals.maximum += newMwh.maximum;
     },
     calculateNewData(currentDataPoint) {
-      //update the mwh and euro totals based on new data point.
+      //takes current data point and returns mwh categories object.
       var result = { minimum: 0, medium: 0, maximum: 0 };
       var resultEuro = { minimum: 0, medium: 0, maximum: 0 };
       if (currentDataPoint.flame === FLAME_ON) {
         var irv = currentDataPoint.irv;
         if (MINIMUM_LOWER <= irv && irv <= MINIMUM_UPPER) {
           result.minimum = currentDataPoint.mwh;
-          resultEuro.minimum++;
         } else if (MEDIUM_LOWER <= irv && irv <= MEDIUM_UPPER) {
           result.medium = currentDataPoint.mwh;
-          resultEuro.medium++;
         } else if (MAXIMUM_LOWER <= irv) {
           result.maximum = currentDataPoint.mwh;
-          resultEuro.maximum++;
         }
       }
 
-      return [result, resultEuro];
+      return result;
     },
     totalMWh() {
       return (
@@ -468,21 +447,40 @@ export default {
             flame: data.flame,
             eoh: data.eoh
           };
-          var result = vueInstance.calculateNewData(
+          var newMwh = vueInstance.calculateNewData(
             vueInstance.currentDataPoint
+
           );
-          var newMwh = result[0];
-          var newEuroMinutes = result[1];
-          var month = parseInt(timestamp.split(" ")[0].split(".")[1]);
           var date = timestamp.split(" ")[0];
+          var month = parseInt(date.split(".")[1]);
           var day = parseInt(date.split(".")[0]);
           var hour = parseInt(timestamp.split(" ")[1].split(":")[0]);
 
-          console.log("^^^", result);
+          if (month != vueInstance.currentMonth) {
+            vueInstance.monthlyMwhTotals = {
+              minimum: 0,
+              medium: 0,
+              maximum: 0
+            };
+            vueInstance.currentMonth = month;
+            //reinitialise graphs.
+            vueInstance.currentDayIndex = day - 2;
+            vueInstance.initializeBarChart(month);
+            vueInstance.initializeLineChart();
+          }
 
-          vueInstance.updateMonthlyTotals(day, month, newMwh, newEuroMinutes);
-          vueInstance.updateDailyTotals(date, newMwh, newEuroMinutes);
-          vueInstance.updateHourlyTotals(hour, newMwh, newEuroMinutes);
+          vueInstance.updateMonthlyTotals(day, month, newMwh);
+
+          if (day != vueInstance.currentDay) {
+            vueInstance.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+            vueInstance.dailyMarketTotal = 0;
+            vueInstance.updateChartsNewDay(day);
+          }
+          vueInstance.updateDailyTotals(date, newMwh);
+
+          vueInstance.updateHourlyTotals(hour, newMwh);
+
+          vueInstance.updateCharts();
 
           setTimeout(function() {
             parser.resume();
