@@ -1,6 +1,5 @@
 <template>
-  <div class="dashboard">
-    Dashboard {{convertStringToNum("5,00")}}
+  <div class="dashboard" style="max-width:1200px; margin:0 auto">
     <v-row>
       <v-col md="4" cols="12">
         <v-card height="100%">
@@ -11,14 +10,14 @@
       <v-col md="4" cols="12">
         <v-card height="100%">
           <v-card-title class="subtitle-2">TurnUp in Euro (current month)</v-card-title>
-          <v-card-text class="teal--text display-2">&euro; {{totalEuro().toFixed(2)}}</v-card-text>
+          <v-card-text class="teal--text display-2">&euro; {{monthlyEuroTotal.toFixed(2)}}</v-card-text>
         </v-card>
       </v-col>
       <v-col md="4" cols="12">
         <v-card height="100%">
           <div class="d-flex flex-no-wrap justify-space-between">
             <div>
-              <v-card-title class="subtitle-2">SGT5-4000F | GT10 GT20</v-card-title>
+              <v-card-title class="subtitle-2">SGT5-4000F | GT10 &nbsp;<span class="grey--text"> GT20</span></v-card-title>
               <v-card-text>
                 <v-card-subtitle class="subtitle-2">{{currentDataPoint.timestamp}}</v-card-subtitle>
                 <br />
@@ -49,11 +48,6 @@
           </v-card-text>
         </v-card>
       </v-col>
-      {{hourlyMwhTotals}}
-      <br />
-      {{dailyMarketTotal}}
-      <br />
-      {{hourlyMwhTotal}}
     </div>
   </div>
 </template>
@@ -77,9 +71,13 @@ export default {
       hourlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
+      monthlyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
+      dailyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
+      hourlyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
       currentHour: 0,
       currentDay: "",
       currentDayIndex: -1,
+      lineChartIndex: -1,
       currentMonth: "",
       barCanvas: {},
       barChart: {},
@@ -100,16 +98,16 @@ export default {
     },
     monthlyEuroTotal: function() {
       return (
-        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM +
-        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM +
-        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM * 60 +
+        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM * 60 +
+        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM * 60
       );
     },
     dailyEuroTotal: function() {
       return (
-        this.dailyMwhTotals.minimum * PRICE_MIN_MINIMUM +
-        this.dailyMwhTotals.medium * PRICE_MIN_MEDIUM +
-        this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+        this.dailyMwhTotals.minimum * PRICE_MIN_MINIMUM * 60 +
+        this.dailyMwhTotals.medium * PRICE_MIN_MEDIUM * 60 +
+        this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM * 60
       );
     },
     hourlyMwhTotal: function() {
@@ -122,11 +120,17 @@ export default {
   },
   methods: {
     //takes a string of european number and converts to number
-    convertStringToNum(numString) {
+    convertGermanStringToNum(numString) {
       var result = parseFloat(numString.replace(".", "").replace(",", "."));
       return result;
     },
     loadChart() {
+      function newDate(days) {
+        return moment()
+          .add(days, "d")
+          .toDate();
+      }
+
       var barCanvas = document.getElementById("myChart");
       var lineCanvas = document.getElementById("mylineChart");
       this.lineCanvas = lineCanvas;
@@ -160,19 +164,34 @@ export default {
           scales: {
             xAxes: [
               {
-                barPercentage: 0.06,
-                stacked: true,
+                //display: false hide labels
+                categoryPercentage: 1.0, //no padding
+                barPercentage: 0.9,
                 offset: true,
-                type: "time",
-                time: {
-                  parser: "DD.MM.YYYY",
-                  displayFormats: { day: "MM/YY" },
-                  unit: "month"
-                }
+                ticks: {
+                  // display: false //this will remove only the label
+                  autoSkip: true,
+                  maxTicksLimit: 2,
+                  maxRotation: 0 //don't rotate labesl
+                },
+                responsive: false,
+                gridLines: {
+                  offsetGridLines: true
+                },
+
+                stacked: true,
+                beginAtZero: true
               }
             ],
 
-            yAxes: [{ stacked: true }]
+            yAxes: [
+              {
+                stacked: true,
+                ticks: {
+                  beginAtZero: true
+                }
+              }
+            ]
           }
         }
       });
@@ -187,7 +206,7 @@ export default {
             {
               label: "Customers Price",
               data: [],
-              backgroundColor: "#50BED7"
+              backgroundColor: "rgb(80,190,215,0.6)" //"#50BED7"
             },
             {
               label: "Market Price",
@@ -197,6 +216,11 @@ export default {
           ]
         },
         options: {
+          layout: {
+            padding: {
+              left: 10
+            }
+          },
           tooltips: {
             enabled: false
           },
@@ -209,6 +233,10 @@ export default {
           scales: {
             xAxes: [
               {
+                offset: true,
+                ticks: {
+                  maxRotation: 0
+                },
                 type: "time",
                 time: {
                   parser: "DD.MM.YYYY",
@@ -218,30 +246,89 @@ export default {
               }
             ],
 
-            yAxes: []
+            yAxes: [
+              {
+                ticks: {
+                  beginAtZero: true
+                }
+              }
+            ]
           }
         }
       });
       this.lineChart = mylineChart;
     },
-    updateHourlyTotals(hour, newData) {
+    getDaysArrayByMonth() {
+      //need to use this for bar chart, as chartjs creates overlapping bars when
+      //using a dynamic time scale (library bug)
+      var daysInMonth = moment().daysInMonth();
+      var arrDays = [];
+
+      while (daysInMonth) {
+        var current = moment().date(daysInMonth);
+        arrDays.push(current);
+        daysInMonth--;
+      }
+
+      return arrDays;
+    },
+    initializeLineChart() {
+      //clear all data from line chart
+      this.lineChart.data.labels = [];
+      this.lineChart.data.datasets[0].data = [];
+      this.lineChart.data.datasets[1].data = [];
+
+      this.lineChartIndex = -1;
+    },
+    initializeBarChart(monthAsInteger) {
+      //clear existing data
+      this.barChart.data.labels = [];
+      this.barChart.data.datasets[0].data = [];
+      this.barChart.data.datasets[1].data = [];
+      this.barChart.data.datasets[2].data = [];
+
+      //get month names to put min/max labels on x axis
+      var monthName = moment(monthAsInteger, "M").format("MMMM");
+      var daysInMonth = moment(monthAsInteger, "M").daysInMonth();
+      var nextMonth;
+      if (monthAsInteger == 12) {
+        nextMonth = 1;
+      } else {
+        nextMonth = monthAsInteger + 1;
+      }
+      var nextMonthName = moment(nextMonth, "M").format("MMMM");
+
+      for (var x = 0; x < daysInMonth; x++) {
+        this.barChart.data.labels.push(monthName);
+        this.barChart.data.datasets[0].data.push(0);
+        this.barChart.data.datasets[1].data.push(0);
+        this.barChart.data.datasets[2].data.push(0);
+      }
+      this.barChart.data.labels.push(nextMonthName);
+    },
+
+    updateHourlyTotals(hour, newMwh, newEuro) {
       //every hour have to update daily market price total.
       if (hour != this.currentHour) {
         this.updateDailyMarketTotal(this.currentDay, this.currentHour);
         this.currentHour = hour;
         this.hourlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
       }
-      this.hourlyMwhTotals.minimum += newData.minimum;
-      this.hourlyMwhTotals.medium += newData.medium;
-      this.hourlyMwhTotals.maximum += newData.maximum;
+      this.hourlyMwhTotals.minimum += newMwh.minimum;
+      this.hourlyMwhTotals.medium += newMwh.medium;
+      this.hourlyMwhTotals.maximum += newMwh.maximum;
+
+      this.hourlyEuroTotals.minimum += newEuro.minimum;
+      this.hourlyEuroTotals.medium += newEuro.medium;
+      this.hourlyEuroTotals.maximum += newEuro.maximum;
     },
-    updateDailyTotals(day, newData) {
+    updateDailyTotals(day, newMwh, newEuro) {
       if (day != this.currentDay) {
-        console.log("new day %0 %0", day, this.dailyMwhTotals);
         this.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.dailyEuroTotals = { minimum: 0, medium: 0, maximum: 0 };
         this.dailyMarketTotal = 0;
 
-        this.barChart.data.labels.push(day);
+        //this.barChart.data.labels.push(day);
         this.barChart.data.datasets[0].data.push(0);
         this.barChart.data.datasets[1].data.push(0);
         this.barChart.data.datasets[2].data.push(0);
@@ -254,10 +341,15 @@ export default {
 
         this.currentDay = day;
         this.currentDayIndex++;
+        this.lineChartIndex++;
       }
-      this.dailyMwhTotals.minimum += newData.minimum;
-      this.dailyMwhTotals.medium += newData.medium;
-      this.dailyMwhTotals.maximum += newData.maximum;
+      this.dailyMwhTotals.minimum += newMwh.minimum;
+      this.dailyMwhTotals.medium += newMwh.medium;
+      this.dailyMwhTotals.maximum += newMwh.maximum;
+
+      this.dailyEuroTotals.minimum += newEuro.minimum;
+      this.dailyEuroTotals.medium += newEuro.medium;
+      this.dailyEuroTotals.maximum += newEuro.maximum;
 
       this.barChart.data.datasets[0].data[
         this.currentDayIndex
@@ -271,44 +363,52 @@ export default {
       this.barChart.update();
 
       this.lineChart.data.datasets[0].data[
-        this.currentDayIndex
+        this.lineChartIndex
       ] = this.dailyEuroTotal;
 
       this.lineChart.data.datasets[1].data[
-        this.currentDayIndex
+        this.lineChartIndex
       ] = this.dailyMarketTotal;
       this.lineChart.update();
     },
-    updateTotals() {
+    updateMonthlyTotals(day, month, newMwh, newEuro) {
+      if (month != this.currentMonth) {
+        this.monthlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.monthlyEuroTotals = { minimum: 0, medium: 0, maximum: 0 };
+        this.currentMonth = month;
+
+        //reinitialise graphs.
+        this.currentDayIndex = day - 2;
+        this.initializeBarChart(month);
+        this.initializeLineChart();
+      }
+      this.monthlyMwhTotals.minimum += newMwh.minimum;
+      this.monthlyMwhTotals.medium += newMwh.medium;
+      this.monthlyMwhTotals.maximum += newMwh.maximum;
+
+      this.monthlyEuroTotals.minimum += newEuro.minimum;
+      this.monthlyEuroTotals.medium += newEuro.medium;
+      this.monthlyEuroTotals.maximum += newEuro.maximum;
+    },
+    calculateNewData(currentDataPoint) {
       //update the mwh and euro totals based on new data point.
       var result = { minimum: 0, medium: 0, maximum: 0 };
-      if (this.currentDataPoint.flame === FLAME_ON) {
-        var irv = this.currentDataPoint.irv;
+      var resultEuro = { minimum: 0, medium: 0, maximum: 0 };
+      if (currentDataPoint.flame === FLAME_ON) {
+        var irv = currentDataPoint.irv;
         if (MINIMUM_LOWER <= irv && irv <= MINIMUM_UPPER) {
-          this.monthlyMwhTotals.minimum += this.currentDataPoint.mwh;
-          result.minimum = this.currentDataPoint.mwh;
-          console.log(
-            "adding mimimum irv is " + this.currentDataPoint.irv + "mwh is ",
-            this.currentDataPoint.mwh
-          );
+          result.minimum = currentDataPoint.mwh;
+          resultEuro.minimum++;
         } else if (MEDIUM_LOWER <= irv && irv <= MEDIUM_UPPER) {
-          console.log(
-            "adding medium irv is " + this.currentDataPoint.irv + "mwh is ",
-            this.currentDataPoint.mwh
-          );
-          this.monthlyMwhTotals.medium += this.currentDataPoint.mwh;
-          result.medium = this.currentDataPoint.mwh;
+          result.medium = currentDataPoint.mwh;
+          resultEuro.medium++;
         } else if (MAXIMUM_LOWER <= irv) {
-          console.log(
-            "adding maximum irv is " + this.currentDataPoint.irv + "mwh is ",
-            this.currentDataPoint.mwh
-          );
-          this.monthlyMwhTotals.maximum += this.currentDataPoint.mwh;
-          result.maximum = this.currentDataPoint.mwh;
+          result.maximum = currentDataPoint.mwh;
+          resultEuro.maximum++;
         }
       }
 
-      return result;
+      return [result, resultEuro];
     },
     totalMWh() {
       return (
@@ -320,9 +420,9 @@ export default {
 
     totalEuro() {
       return (
-        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM +
-        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM +
-        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM
+        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM * 60 +
+        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM * 60 +
+        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM * 60
       );
     },
     updateDailyMarketTotal(day, hour) {
@@ -374,19 +474,30 @@ export default {
           var data = row.data;
           var timestamp = vueInstance.reformatTimestamp(data.timestamp);
 
+          //divide by 60 to convert mw minute into mwh, divide by 1000 to convert kW into MW
           vueInstance.currentDataPoint = {
             timestamp: timestamp,
-            mwh: vueInstance.convertStringToNum(data.mw) / 60.0,
-            irv: vueInstance.convertStringToNum(data.irv),
+            mwh: vueInstance.convertGermanStringToNum(data.mw) / 60000.0,
+            irv: vueInstance.convertGermanStringToNum(data.irv),
             flame: data.flame,
             eoh: data.eoh
           };
-          var diff = vueInstance.updateTotals();
+          var result = vueInstance.calculateNewData(
+            vueInstance.currentDataPoint
+          );
+          var newMwh = result[0];
+          var newEuroMinutes = result[1];
+          var month = parseInt(timestamp.split(" ")[0].split(".")[1]);
           var date = timestamp.split(" ")[0];
-          var hour = timestamp.split(" ")[1].split(":")[0];
+          var day = parseInt(date.split(".")[0]);
+          var hour = parseInt(timestamp.split(" ")[1].split(":")[0]);
 
-          vueInstance.updateDailyTotals(date, diff);
-          vueInstance.updateHourlyTotals(hour, diff);
+          console.log("^^^", result);
+
+          vueInstance.updateMonthlyTotals(day, month, newMwh, newEuroMinutes);
+          vueInstance.updateDailyTotals(date, newMwh, newEuroMinutes);
+          vueInstance.updateHourlyTotals(hour, newMwh, newEuroMinutes);
+
           setTimeout(function() {
             parser.resume();
           }, vueInstance.updateSignalPeriod);
