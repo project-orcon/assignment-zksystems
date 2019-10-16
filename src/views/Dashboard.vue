@@ -17,7 +17,10 @@
         <v-card height="100%">
           <div class="d-flex flex-no-wrap justify-space-between">
             <div>
-              <v-card-title class="subtitle-2">SGT5-4000F | GT10 &nbsp;<span class="grey--text"> GT20</span></v-card-title>
+              <v-card-title class="subtitle-2">
+                SGT5-4000F | GT10 &nbsp;
+                <span class="grey--text">GT20</span>
+              </v-card-title>
               <v-card-text>
                 <v-card-subtitle class="subtitle-2">{{currentDataPoint.timestamp}}</v-card-subtitle>
                 <br />
@@ -71,9 +74,6 @@ export default {
       hourlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
-      monthlyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
-      dailyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
-      hourlyEuroTotals: { minimum: 0, medium: 0, maximum: 0 },
       currentHour: 0,
       currentDay: "",
       currentDayIndex: -1,
@@ -317,15 +317,10 @@ export default {
       this.hourlyMwhTotals.minimum += newMwh.minimum;
       this.hourlyMwhTotals.medium += newMwh.medium;
       this.hourlyMwhTotals.maximum += newMwh.maximum;
-
-      this.hourlyEuroTotals.minimum += newEuro.minimum;
-      this.hourlyEuroTotals.medium += newEuro.medium;
-      this.hourlyEuroTotals.maximum += newEuro.maximum;
     },
     updateDailyTotals(day, newMwh, newEuro) {
       if (day != this.currentDay) {
         this.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-        this.dailyEuroTotals = { minimum: 0, medium: 0, maximum: 0 };
         this.dailyMarketTotal = 0;
 
         //this.barChart.data.labels.push(day);
@@ -346,10 +341,6 @@ export default {
       this.dailyMwhTotals.minimum += newMwh.minimum;
       this.dailyMwhTotals.medium += newMwh.medium;
       this.dailyMwhTotals.maximum += newMwh.maximum;
-
-      this.dailyEuroTotals.minimum += newEuro.minimum;
-      this.dailyEuroTotals.medium += newEuro.medium;
-      this.dailyEuroTotals.maximum += newEuro.maximum;
 
       this.barChart.data.datasets[0].data[
         this.currentDayIndex
@@ -374,7 +365,6 @@ export default {
     updateMonthlyTotals(day, month, newMwh, newEuro) {
       if (month != this.currentMonth) {
         this.monthlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-        this.monthlyEuroTotals = { minimum: 0, medium: 0, maximum: 0 };
         this.currentMonth = month;
 
         //reinitialise graphs.
@@ -385,10 +375,6 @@ export default {
       this.monthlyMwhTotals.minimum += newMwh.minimum;
       this.monthlyMwhTotals.medium += newMwh.medium;
       this.monthlyMwhTotals.maximum += newMwh.maximum;
-
-      this.monthlyEuroTotals.minimum += newEuro.minimum;
-      this.monthlyEuroTotals.medium += newEuro.medium;
-      this.monthlyEuroTotals.maximum += newEuro.maximum;
     },
     calculateNewData(currentDataPoint) {
       //update the mwh and euro totals based on new data point.
