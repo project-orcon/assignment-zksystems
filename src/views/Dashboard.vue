@@ -1,10 +1,15 @@
 <template>
   <div class="dashboard" style="max-width:1200px; margin:0 auto">
-    <v-row>
+    <v-row v-show="loading" style="height:80vh">
+      <v-col align-self="center" class="text-center teal--text">
+        <v-progress-circular indeterminate color="teal" size="100">Loading...</v-progress-circular>
+      </v-col>
+    </v-row>
+    <v-row v-show="!loading">
       <v-col md="4" cols="12">
         <v-card height="100%">
           <v-card-title class="subtitle-2">TurnUp in MWh (current month)</v-card-title>
-          <v-card-text class="teal--text display-2">{{totalMWh().toFixed(2)}} MWh</v-card-text>
+          <v-card-text class="teal--text display-2">{{totalMWh.toFixed(2)}} MWh</v-card-text>
         </v-card>
       </v-col>
       <v-col md="4" cols="12">
@@ -34,7 +39,7 @@
         </v-card>
       </v-col>
     </v-row>
-    <div class="row">
+    <v-row v-show="!loading">
       <v-col md="6" cols="12">
         <v-card>
           <v-card-title class="subtitle-2">TurnUp in MWh</v-card-title>
@@ -51,7 +56,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-    </div>
+    </v-row>
   </div>
 </template>
 
@@ -69,14 +74,15 @@ const PRICE_MIN_MAXIMUM = 2.08;
 export default {
   data() {
     return {
+      loading: true,
       updateSignalPeriod: 0,
       currentDataPoint: { timestamp: "", mwh: 0, irv: 0, flame: "", eoh: "" },
-      hourlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       dailyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
       monthlyMwhTotals: { minimum: 0, medium: 0, maximum: 0 },
-      currentHour: 0,
+      currentHour: "",
       currentDay: "",
-      currentDayIndex: -1,
+      currentDate: "",
+      barChartIndex: -1,
       lineChartIndex: -1,
       currentMonth: "",
       barCanvas: {},
@@ -89,13 +95,10 @@ export default {
   },
   mounted: function() {
     this.loadChart();
-    this.loadCSV();
     this.loadStockMarketCSV();
+    this.loadCSV();
   },
   computed: {
-    currentMonth: function() {
-      return currentDay.split("-")[1];
-    },
     monthlyEuroTotal: function() {
       return (
         this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM * 60 +
@@ -110,11 +113,11 @@ export default {
         this.dailyMwhTotals.maximum * PRICE_MIN_MAXIMUM * 60
       );
     },
-    hourlyMwhTotal: function() {
+    totalMWh: function() {
       return (
-        this.hourlyMwhTotals.minimum +
-        this.hourlyMwhTotals.medium +
-        this.hourlyMwhTotals.maximum
+        this.monthlyMwhTotals.minimum +
+        this.monthlyMwhTotals.medium +
+        this.monthlyMwhTotals.maximum
       );
     }
   },
@@ -258,46 +261,38 @@ export default {
       });
       this.lineChart = mylineChart;
     },
-    getDaysArrayByMonth() {
-      //need to use this for bar chart, as chartjs creates overlapping bars when
-      //using a dynamic time scale (library bug)
-      var daysInMonth = moment().daysInMonth();
-      var arrDays = [];
-
-      while (daysInMonth) {
-        var current = moment().date(daysInMonth);
-        arrDays.push(current);
-        daysInMonth--;
-      }
-
-      return arrDays;
-    },
     initializeLineChart() {
       //clear all data from line chart
       this.lineChart.data.labels = [];
       this.lineChart.data.datasets[0].data = [];
       this.lineChart.data.datasets[1].data = [];
-
-      this.lineChartIndex = -1;
     },
-    initializeBarChart(monthAsInteger) {
-      //clear existing data
+    initializeBarChart(date) {
+      //unlike the line chart - pushing labels with the current date doesn't work
+      //for dynamic bar charts. Bars overlap each other. Bug in chartjs
+      //as a result have to manually create bar graph and set labels equal to the
+      //number of days in the month.
+
+      var monthAsInteger = parseInt(date.split(".")[1]);
+      var day = parseInt(date.split(".")[0]);
+
+      //clear existing data from bar chart.
       this.barChart.data.labels = [];
       this.barChart.data.datasets[0].data = [];
       this.barChart.data.datasets[1].data = [];
       this.barChart.data.datasets[2].data = [];
 
-      //get month names to put min/max labels on x axis
-      var monthName = moment(monthAsInteger, "M").format("MMMM");
-      var daysInMonth = moment(monthAsInteger, "M").daysInMonth();
-      var nextMonth;
-      if (monthAsInteger == 12) {
-        nextMonth = 1;
-      } else {
-        nextMonth = monthAsInteger + 1;
-      }
-      var nextMonthName = moment(nextMonth, "M").format("MMMM");
+      //set datasets index for bar graph
 
+      //get month names to put min/max labels on x axis
+      var monthName = moment(date, "DD.MM.YYYY").format("MMMM YYYY");
+      var daysInMonth = moment(date, "DD.MM.YYYY").daysInMonth();
+      var nextMonthName = moment(date, "DD.MM.YYYY")
+        .add(1, "months")
+        .format("MMMM YYYY");
+
+      //add labels for all days of the month, and 0 values (label can have same name as
+      //only the first and last labels will be shown)
       for (var x = 0; x < daysInMonth; x++) {
         this.barChart.data.labels.push(monthName);
         this.barChart.data.datasets[0].data.push(0);
@@ -306,25 +301,21 @@ export default {
       }
       this.barChart.data.labels.push(nextMonthName);
     },
-    updateChartsNewDay(day) {
-      this.lineChart.data.labels.push(day);
+    updateLineChartNewDay(date) {
+      this.lineChart.data.labels.push(date);
       this.lineChart.data.datasets[0].data.push(0);
       this.lineChart.data.datasets[1].data.push(0);
       this.lineChart.update();
-
-      this.currentDay = day;
-      this.currentDayIndex++;
-      this.lineChartIndex++;
     },
     updateCharts() {
       this.barChart.data.datasets[0].data[
-        this.currentDayIndex
+        this.barChartIndex
       ] = this.dailyMwhTotals.minimum;
       this.barChart.data.datasets[1].data[
-        this.currentDayIndex
+        this.barChartIndex
       ] = this.dailyMwhTotals.medium;
       this.barChart.data.datasets[2].data[
-        this.currentDayIndex
+        this.barChartIndex
       ] = this.dailyMwhTotals.maximum;
       this.barChart.update();
 
@@ -337,23 +328,12 @@ export default {
       ] = this.dailyMarketTotal;
       this.lineChart.update();
     },
-    updateHourlyTotals(hour, newMwh) {
-      //every hour have to update daily market price total.
-      if (hour != this.currentHour) {
-        this.updateDailyMarketTotal(this.currentDay, this.currentHour);
-        this.currentHour = hour;
-        this.hourlyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
-      }
-      this.hourlyMwhTotals.minimum += newMwh.minimum;
-      this.hourlyMwhTotals.medium += newMwh.medium;
-      this.hourlyMwhTotals.maximum += newMwh.maximum;
-    },
-    updateDailyTotals(day, newMwh) {
+    updateDailyTotals(newMwh) {
       this.dailyMwhTotals.minimum += newMwh.minimum;
       this.dailyMwhTotals.medium += newMwh.medium;
       this.dailyMwhTotals.maximum += newMwh.maximum;
     },
-    updateMonthlyTotals(day, month, newMwh) {
+    updateMonthlyTotals(newMwh) {
       this.monthlyMwhTotals.minimum += newMwh.minimum;
       this.monthlyMwhTotals.medium += newMwh.medium;
       this.monthlyMwhTotals.maximum += newMwh.maximum;
@@ -361,7 +341,6 @@ export default {
     calculateNewData(currentDataPoint) {
       //takes current data point and returns mwh categories object.
       var result = { minimum: 0, medium: 0, maximum: 0 };
-      var resultEuro = { minimum: 0, medium: 0, maximum: 0 };
       if (currentDataPoint.flame === FLAME_ON) {
         var irv = currentDataPoint.irv;
         if (MINIMUM_LOWER <= irv && irv <= MINIMUM_UPPER) {
@@ -375,27 +354,12 @@ export default {
 
       return result;
     },
-    totalMWh() {
-      return (
-        this.monthlyMwhTotals.minimum +
-        this.monthlyMwhTotals.medium +
-        this.monthlyMwhTotals.maximum
-      );
-    },
 
-    totalEuro() {
-      return (
-        this.monthlyMwhTotals.minimum * PRICE_MIN_MINIMUM * 60 +
-        this.monthlyMwhTotals.medium * PRICE_MIN_MEDIUM * 60 +
-        this.monthlyMwhTotals.maximum * PRICE_MIN_MAXIMUM * 60
-      );
-    },
-    updateDailyMarketTotal(day, hour) {
-      console.log("^^^", day + "-" + hour);
-      console.log("^^^", this.stockMarketData[day + "-" + hour]);
-      if (this.stockMarketData[day + "-" + hour]) {
+    updateDailyMarketTotal(date, hourString, currentMwhTotal) {
+      var hour = parseInt(hourString) + 1; //hourString 0 to 23 map to 1 to 24
+      if (date + "-" + hour in this.stockMarketData) {
         this.dailyMarketTotal +=
-          this.stockMarketData[day + "-" + hour] * this.hourlyMwhTotal;
+          this.stockMarketData[date + "-" + hour] * currentMwhTotal;
       }
     },
 
@@ -406,7 +370,6 @@ export default {
         download: true,
         header: true,
         step: function(row) {
-          console.log("Row:", row.data);
           row.data.hours = row.data.hours.replace("H", "");
           stockDict[row.data.day + "-" + row.data.hours] = parseFloat(
             row.data.price
@@ -436,6 +399,7 @@ export default {
         header: true,
         step: function(row, parser) {
           parser.pause();
+          vueInstance.loading = false;
           var data = row.data;
           var timestamp = vueInstance.reformatTimestamp(data.timestamp);
 
@@ -449,12 +413,12 @@ export default {
           };
           var newMwh = vueInstance.calculateNewData(
             vueInstance.currentDataPoint
-
           );
+
           var date = timestamp.split(" ")[0];
-          var month = parseInt(date.split(".")[1]);
-          var day = parseInt(date.split(".")[0]);
-          var hour = parseInt(timestamp.split(" ")[1].split(":")[0]);
+          var month = date.split(".")[1];
+          var day = date.split(".")[0];
+          var hour = timestamp.split(" ")[1].split(":")[0];
 
           if (month != vueInstance.currentMonth) {
             vueInstance.monthlyMwhTotals = {
@@ -462,25 +426,39 @@ export default {
               medium: 0,
               maximum: 0
             };
-            vueInstance.currentMonth = month;
-            //reinitialise graphs.
-            vueInstance.currentDayIndex = day - 2;
-            vueInstance.initializeBarChart(month);
+
+            //reinitialise charts
+            vueInstance.barChartIndex = parseInt(day) - 1 - 1;
+            vueInstance.lineChartIndex = -1;
+
+            vueInstance.initializeBarChart(date);
             vueInstance.initializeLineChart();
           }
-
-          vueInstance.updateMonthlyTotals(day, month, newMwh);
 
           if (day != vueInstance.currentDay) {
             vueInstance.dailyMwhTotals = { minimum: 0, medium: 0, maximum: 0 };
             vueInstance.dailyMarketTotal = 0;
-            vueInstance.updateChartsNewDay(day);
-          }
-          vueInstance.updateDailyTotals(date, newMwh);
 
-          vueInstance.updateHourlyTotals(hour, newMwh);
+            //add new label to LineChart (Bar chart doesn't need one as labels created when initialized)
+            vueInstance.updateLineChartNewDay(date);
+
+            vueInstance.barChartIndex++;
+            vueInstance.lineChartIndex++;
+          }
+
+          var totalMwhFromDataPoint =
+            newMwh.minimum + newMwh.medium + newMwh.maximum;
+          vueInstance.updateDailyMarketTotal(date, hour, totalMwhFromDataPoint);
+          vueInstance.updateDailyTotals(newMwh);
+          vueInstance.updateMonthlyTotals(newMwh);
 
           vueInstance.updateCharts();
+
+          //update current values
+          vueInstance.currentDate = date;
+          vueInstance.currentMonth = month;
+          vueInstance.currentDay = day;
+          vueInstance.currentHour = hour;
 
           setTimeout(function() {
             parser.resume();
